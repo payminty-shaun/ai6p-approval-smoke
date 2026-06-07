@@ -1,0 +1,91 @@
+# Promote to a higher environment — webapp-owned delivery promotion (AI6P-826,
+# Mechanism A). RENDERED from infra/bootstrap/templates/website/_workflows/promote-env.yml.tmpl
+# for the AI6P-828 sacrificial smoke. Placeholders substituted as the materialiser does:
+#   PROMOTE_ENV_NAME -> uat
+#   INSTALL_COMMAND  -> npm ci --no-audit --no-fund
+#   BUILD_COMMAND    -> npm run build
+#   AWS_REGION       -> ap-southeast-2
+#
+# THE GATE IS THE TRIGGER. This workflow has **no `push` trigger** — its only
+# trigger is `workflow_dispatch`. The Product Sweet webapp's approval action is
+# what dispatches it, supplying the reviewed commit as the `sha` input.
+name: promote-uat
+
+on:
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: "Reviewed commit SHA to promote (pinned; never HEAD)."
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: promote-uat
+  cancel-in-progress: false
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    environment: uat
+    steps:
+      - name: Checkout reviewed commit
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ inputs.sha }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@e3dd6a429d7300a6a4c196c26e071d42e0343502 # v4.0.2
+        with:
+          role-to-assume: ${{ vars.PRODUCTSWEET_DEPLOY_ROLE_ARN }}
+          aws-region: ap-southeast-2
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Build
+        run: npm run build
+
+      - name: Trigger Amplify RELEASE for uat
+        id: release
+        run: |
+          set -euo pipefail
+          job_id=$(aws amplify start-job \
+            --app-id "${{ vars.PRODUCTSWEET_AMPLIFY_APP_ID }}" \
+            --branch-name uat \
+            --job-type RELEASE \
+            --query 'jobSummary.jobId' \
+            --output text)
+          echo "job_id=$job_id" >> "$GITHUB_OUTPUT"
+          echo "Started Amplify job $job_id for uat (sha ${{ inputs.sha }})"
+
+      - name: Poll Amplify job to terminal status
+        run: |
+          set -euo pipefail
+          job_id="${{ steps.release.outputs.job_id }}"
+          for i in $(seq 1 60); do
+            status=$(aws amplify get-job \
+              --app-id "${{ vars.PRODUCTSWEET_AMPLIFY_APP_ID }}" \
+              --branch-name uat \
+              --job-id "$job_id" \
+              --query 'job.summary.status' \
+              --output text)
+            echo "Amplify job $job_id status: $status (poll $i/60)"
+            case "$status" in
+              SUCCEED) exit 0 ;;
+              FAILED|CANCELLED) exit 1 ;;
+              PENDING|PROVISIONING|RUNNING) sleep 30 ;;
+              *) echo "Unknown status $status" >&2; exit 1 ;;
+            esac
+          done
+          echo "Timed out after 30 minutes" >&2
+          exit 1
