@@ -1,22 +1,44 @@
-# Low-environment deployment — RENDERED from
-# infra/bootstrap/templates/website/_workflows/deploy-low.yml.tmpl for the
-# AI6P-828 sacrificial smoke. Placeholders substituted as the materialiser does:
-#   MAIN_PATH_FILTERS -> generic site paths
-#   INSTALL_COMMAND   -> npm ci --no-audit --no-fund
-#   BUILD_COMMAND     -> npm run build
-#   AWS_REGION        -> ap-southeast-2
+# Low-environment deployment — orchestrates the Amplify RELEASE job for every
+# push to main whose changeset touches deployment-relevant paths. This is the
+# low (auto-deploy) leg of the webapp-owned delivery model (AI6P-826): pushing
+# to main deploys the LOW environment automatically; promotion to any higher
+# environment is gated behind the `promote-<env>.yml` workflows, which have no
+# push trigger and run only when the Product Sweet webapp dispatches them with
+# the reviewed commit pinned as a `sha` input ("the gate is the trigger").
 #
-# Pushing to main deploys the LOW environment automatically; promotion to any
-# higher environment is gated behind promote-<env>.yml ("the gate is the trigger").
+# AI6P-249 / AI6P-278 / AI6P-017 / AI6P-414 / AI6P-826 lessons:
+#   - `permissions: id-token: write` enables OIDC token minting
+#     (canonical-checklist §B4).
+#   - Amplify auto-build is OFF (canonical-checklist §C4) — this workflow is
+#     the sole low-env release path. We start the job, then poll until terminal.
+#   - Actions are SHA-pinned per AI6P-103/-104 supply-chain hardening.
+#   - The deploy-role ARN reference uses `PRODUCTSWEET_DEPLOY_ROLE_ARN` (the
+#     variable the engine actually provisions in `secrets-placeholders-
+#     provisioned`, AI6P-274). The Amplify appId reference uses
+#     `PRODUCTSWEET_AMPLIFY_APP_ID`, written by `hosting-provisioned` after
+#     CreateApp succeeds. The region is baked in at materialise time
+#     (AWS_REGION placeholder) because it is per-project static and the
+#     engine knows it from the manifest.
+#
+# Templated by the AI6P-249 bootstrap; substituted placeholders:
+#   MAIN_PATH_FILTERS  YAML-list of framework-specific deployment paths
+#   INSTALL_COMMAND    e.g. `npm ci --no-audit --no-fund`
+#   BUILD_COMMAND      e.g. `npm run build`
+#   AWS_REGION         baked-in region, e.g. `ap-southeast-2`
 name: deploy-low
 
 on:
   push:
     branches: [main]
     paths:
-      - 'site/**'
-      - 'package.json'
-      - 'package-lock.json'
+      - "src/**"
+      - "public/**"
+      - "index.html"
+      - "vite.config.ts"
+      - "tsconfig.json"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/**"
   workflow_dispatch:
 
 permissions:
@@ -37,6 +59,9 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
         with:
+          # Node 24 — matches the Product Sweet build agent so the
+          # package-lock.json it generates is faithful to what `npm ci`
+          # validates.
           node-version: 24
           cache: npm
 
