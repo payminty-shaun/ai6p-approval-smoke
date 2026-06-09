@@ -34,7 +34,7 @@
 #   INSTALL_COMMAND   e.g. `npm ci --no-audit --no-fund`
 #   BUILD_COMMAND     e.g. `npm run build`
 #   AWS_REGION        baked-in region, e.g. `ap-southeast-2`
-name: promote-uat
+name: promote-staging
 
 on:
   workflow_dispatch:
@@ -49,13 +49,13 @@ permissions:
   id-token: write
 
 concurrency:
-  group: promote-uat
+  group: promote-staging
   cancel-in-progress: false
 
 jobs:
   promote:
     runs-on: ubuntu-latest
-    environment: uat
+    environment: staging
     steps:
       - name: Checkout reviewed commit
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -83,18 +83,18 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Trigger Amplify RELEASE for uat
+      - name: Trigger Amplify RELEASE for staging
         id: release
         run: |
           set -euo pipefail
           job_id=$(aws amplify start-job \
             --app-id "${{ vars.PRODUCTSWEET_AMPLIFY_APP_ID }}" \
-            --branch-name uat \
+            --branch-name staging \
             --job-type RELEASE \
             --query 'jobSummary.jobId' \
             --output text)
           echo "job_id=$job_id" >> "$GITHUB_OUTPUT"
-          echo "Started Amplify job $job_id for uat (sha ${{ inputs.sha }})"
+          echo "Started Amplify job $job_id for staging (sha ${{ inputs.sha }})"
 
       - name: Poll Amplify job to terminal status
         run: |
@@ -103,7 +103,7 @@ jobs:
           for i in $(seq 1 60); do
             status=$(aws amplify get-job \
               --app-id "${{ vars.PRODUCTSWEET_AMPLIFY_APP_ID }}" \
-              --branch-name uat \
+              --branch-name staging \
               --job-id "$job_id" \
               --query 'job.summary.status' \
               --output text)
