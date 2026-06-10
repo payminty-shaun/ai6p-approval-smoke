@@ -9,7 +9,7 @@
 //     build env) so a run can stamp a unique token (e.g. `AI6P-887-<runid>`)
 //     and assert presence in low but absence in a higher env until promoted.
 const VENUE_TOKEN = 'AI6P-894-VENUE';
-const RUN_MARKER = import.meta.env.VITE_VENUE_MARKER ?? 'AI6P-887-LIVE-20260611a';
+const RUN_MARKER = import.meta.env.VITE_VENUE_MARKER ?? 'baseline';
 
 export default function App() {
   return (
