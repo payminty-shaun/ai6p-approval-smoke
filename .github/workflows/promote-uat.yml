@@ -21,10 +21,20 @@
 #   - `environment: <env>` pulls the env-scoped GitHub Actions variables (S6) —
 #     the per-env override of `PRODUCTSWEET_DEPLOY_ROLE_ARN` resolves the S5
 #     per-env deploy role (`AI6P-Tenant-<env>-Env-Role`); the bare repo-level
-#     value is the fallback.
+#     value is the fallback. With `environment:` set, GitHub mints an OIDC token
+#     whose `sub` is `repo:OWNER/REPO:environment:<env>`, which the per-env role
+#     trust must match (AI6P-905 finding #1).
 #   - The Amplify branch deployed is `<env>` — the per-env branch the S5 stack
-#     creates on the tenant's existing Amplify app.
-#   - `permissions: id-token: write` enables OIDC token minting (canonical-checklist §B4).
+#     creates on the tenant's existing Amplify app. An Amplify `RELEASE` job
+#     clones the GIT branch named `<env>` and rebuilds it, so the deployed
+#     artefact is whatever that branch points at. This workflow therefore
+#     force-advances the `<env>` git branch to the reviewed `sha` before the
+#     RELEASE (AI6P-905 finding #3) — that is what makes the sha-pin
+#     load-bearing. (The per-env Amplify branch has auto-build OFF, so this push
+#     cannot race the RELEASE.) The local `Build` step is a fail-fast gate: a
+#     commit that doesn't build never advances the env branch.
+#   - `permissions: id-token: write` enables OIDC token minting (canonical-checklist §B4);
+#     `contents: write` lets the job push the reviewed sha to the `<env>` branch.
 #   - Amplify auto-build is OFF (canonical-checklist §C4) — we start the job, then
 #     poll until terminal.
 #   - Actions are SHA-pinned per AI6P-103/-104 supply-chain hardening.
@@ -45,7 +55,10 @@ on:
         type: string
 
 permissions:
-  contents: read
+  # `contents: write` — the job force-advances the `uat` git
+  # branch to the reviewed sha so Amplify's RELEASE clone deploys exactly that
+  # commit. `id-token: write` — OIDC token minting for the deploy role.
+  contents: write
   id-token: write
 
 concurrency:
@@ -82,6 +95,18 @@ jobs:
 
       - name: Build
         run: npm run build
+
+      - name: Advance uat branch to the reviewed commit
+        # Amplify RELEASE re-clones the git branch named uat and
+        # rebuilds it, so the deployed artefact is whatever that branch points
+        # at. Force-advance the branch to the reviewed sha so RELEASE deploys
+        # EXACTLY the commit reviewed in the lower environment (this is what
+        # makes the sha-pin load-bearing). actions/checkout persists the
+        # credentials this push uses; the branch has Amplify auto-build OFF, so
+        # the push cannot race the RELEASE below.
+        run: |
+          set -euo pipefail
+          git push --force origin "${{ inputs.sha }}:refs/heads/uat"
 
       - name: Trigger Amplify RELEASE for uat
         id: release
