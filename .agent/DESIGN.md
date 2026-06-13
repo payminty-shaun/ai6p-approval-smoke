@@ -1,1 +1,0 @@
-# DESIGN (baseline-only mechanism doc — should be deleted)
