@@ -44,7 +44,7 @@
 #   INSTALL_COMMAND   e.g. `npm ci --no-audit --no-fund`
 #   BUILD_COMMAND     e.g. `npm run build`
 #   AWS_REGION        baked-in region, e.g. `ap-southeast-2`
-name: promote-uat
+name: promote-s8prod
 
 on:
   workflow_dispatch:
@@ -55,20 +55,20 @@ on:
         type: string
 
 permissions:
-  # `contents: write` — the job force-advances the `uat` git
+  # `contents: write` — the job force-advances the `s8prod` git
   # branch to the reviewed sha so Amplify's RELEASE clone deploys exactly that
   # commit. `id-token: write` — OIDC token minting for the deploy role.
   contents: write
   id-token: write
 
 concurrency:
-  group: promote-uat
+  group: promote-s8prod
   cancel-in-progress: false
 
 jobs:
   promote:
     runs-on: ubuntu-latest
-    environment: uat
+    environment: s8prod
     steps:
       - name: Checkout reviewed commit
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
@@ -96,8 +96,8 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Advance uat branch to the reviewed commit
-        # Amplify RELEASE re-clones the git branch named uat and
+      - name: Advance s8prod branch to the reviewed commit
+        # Amplify RELEASE re-clones the git branch named s8prod and
         # rebuilds it, so the deployed artefact is whatever that branch points
         # at. Force-advance the branch to the reviewed sha so RELEASE deploys
         # EXACTLY the commit reviewed in the lower environment (this is what
@@ -106,20 +106,20 @@ jobs:
         # the push cannot race the RELEASE below.
         run: |
           set -euo pipefail
-          git push --force origin "${{ inputs.sha }}:refs/heads/uat"
+          git push --force origin "${{ inputs.sha }}:refs/heads/s8prod"
 
-      - name: Trigger Amplify RELEASE for uat
+      - name: Trigger Amplify RELEASE for s8prod
         id: release
         run: |
           set -euo pipefail
           job_id=$(aws amplify start-job \
             --app-id "${{ vars.PRODUCTSWEET_AMPLIFY_APP_ID }}" \
-            --branch-name uat \
+            --branch-name s8prod \
             --job-type RELEASE \
             --query 'jobSummary.jobId' \
             --output text)
           echo "job_id=$job_id" >> "$GITHUB_OUTPUT"
-          echo "Started Amplify job $job_id for uat (sha ${{ inputs.sha }})"
+          echo "Started Amplify job $job_id for s8prod (sha ${{ inputs.sha }})"
 
       - name: Poll Amplify job to terminal status
         run: |
@@ -128,7 +128,7 @@ jobs:
           for i in $(seq 1 60); do
             status=$(aws amplify get-job \
               --app-id "${{ vars.PRODUCTSWEET_AMPLIFY_APP_ID }}" \
-              --branch-name uat \
+              --branch-name s8prod \
               --job-id "$job_id" \
               --query 'job.summary.status' \
               --output text)
