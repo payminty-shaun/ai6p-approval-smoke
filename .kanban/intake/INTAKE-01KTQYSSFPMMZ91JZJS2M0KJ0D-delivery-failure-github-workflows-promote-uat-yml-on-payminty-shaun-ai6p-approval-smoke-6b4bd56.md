@@ -59,7 +59,13 @@ Optional at first intake. Fill this in during triage or before generating a dev 
 
 ## Questions
 
-Optional at first intake. Fill this in during triage or before generating a dev task in `backlog`.
+```yaml
+- question: The failure is in the "Configure AWS credentials" step of the promote-uat workflow, not in the application code added by this commit. This looks like an infrastructure/secrets configuration issue (e.g. missing or expired AWS role/OIDC config, or missing repo secrets) rather than a bug introduced by the code change. Can you confirm whether AWS credentials/secrets for the promote-uat workflow are known to be set up correctly, or whether this is a known-broken pipeline that needs infra attention? No recommendation from me here — I don't have visibility into the AWS/OIDC configuration for this repo.
+  status: open
+  thread:
+    - role: user
+      text: The failure is in the "Configure AWS credentials" step of the promote-uat workflow, not in the application code added by this commit. This looks like an infrastructure/secrets configuration issue (e.g. missing or expired AWS role/OIDC config, or missing repo secrets) rather than a bug introduced by the code change. Can you confirm whether AWS credentials/secrets for the promote-uat workflow are known to be set up correctly, or whether this is a known-broken pipeline that needs infra attention? No recommendation from me here — I don't have visibility into the AWS/OIDC configuration for this repo.
+```
 
 ## Refinement Notes
 
