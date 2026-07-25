@@ -3,7 +3,7 @@ title: "Delivery failure: .github/workflows/promote-uat.yml on payminty-shaun/ai
 id: INTAKE-01KTQYSSFPMMZ91JZJS2M0KJ0D
 status: intake
 template_type: bug
-intake_state: refining
+intake_state: awaiting-user-review
 delivery_task_ids: []
 created: 2026-06-10
 updated: 2026-07-25
